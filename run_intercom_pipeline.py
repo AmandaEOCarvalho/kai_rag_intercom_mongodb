@@ -136,7 +136,7 @@ def process_single_article(article: dict, components: dict, rag_collection_id: s
 
         # ✅ ETAPA 4: Contextual Enrichment (usa markdown formatado)
         print(" -> Iniciando enriquecimento contextual...")
-        enriched_chunks = components["enricher"].enrich_chunks(chunks, markdown_text)
+        enriched_chunks = components["enricher"].enrich_chunks(chunks, markdown_text, language=lang)
         print(f" -> Enriquecidos {len(enriched_chunks)} chunks com contexto")
 
         # ✅ ETAPA 5: Limpeza condicional + Embeddings (APENAS agora limpa para vetor)
@@ -170,7 +170,7 @@ def process_single_article(article: dict, components: dict, rag_collection_id: s
                 "language": lang,
                 "embedding": embedding,
                 "meta_data": {
-                    "source_type": "intercom_article",
+                    "source_type": "intercom_help_center_article",
                     "article_id": str(article_id),
                     "intercom_url": content.get("url", ""),
                     "intercomCreatedAt": article.get("created_at"),

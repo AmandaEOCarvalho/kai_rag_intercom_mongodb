@@ -126,8 +126,9 @@ def process_single_article_test(article: dict, components: dict, rag_collection_
             print("-" * 70)
 
         # ✅ ETAPA 4: Enriquecimento contextual (usa markdown formatado)
+
         print("\n🔧 ETAPA 4: Enriquecimento contextual...")
-        enriched_chunks = components["enricher"].enrich_chunks(chunks, markdown_text)
+        enriched_chunks = components["enricher"].enrich_chunks(chunks, markdown_text, language=lang)
         print(f"🔧 Gerados e enriquecidos {len(enriched_chunks)} chunks finais")
 
         # Mostra exemplo de chunk enriquecido (ainda com markdown)
@@ -284,8 +285,6 @@ def main():
         print(f"   Categoria: {example_doc['category']}")
         print(f"   Idioma: {example_doc['language']}")
         print(f"   Tamanho do conteúdo: {len(example_doc['content'])} chars")
-        print(f"   Pipeline usado: {example_doc['meta_data']['processing_pipeline']}")
-        print(f"   Limpeza aplicada: {example_doc['meta_data']['cleaned_conditionally']}")
 
     print("\n🎉 Teste concluído! Pipeline seguiu as melhores práticas:")
     print("   ✅ HTML convertido para markdown formatado")

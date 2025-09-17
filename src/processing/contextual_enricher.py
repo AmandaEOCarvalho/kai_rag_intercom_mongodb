@@ -5,12 +5,12 @@ class ContextualEnricher:
     def __init__(self):
         self.client = OpenAI(api_key=Config.OPENAI_API_KEY)
     
-    def enrich_chunks(self, chunks: list, full_document_text: str, model: str = "gpt-4o-mini") -> list:
+    def enrich_chunks(self, chunks: list, full_document_text: str, language: str, model: str = "gpt-4o-mini") -> list:
         """Adiciona contexto a cada chunk usando a metodologia "Contextual Retrieval" da Anthropic.
         O objetivo é tornar cada chunk mais autocontido para melhorar a busca (RAG).
         """
         enriched_chunks = []
-        print(f"  -> Enriquecendo {len(chunks)} chunks...")
+        print(f"  -> Enriquecendo {len(chunks)} chunks no idioma: {language} ...")
         
         for i, chunk in enumerate(chunks):
             prompt = f"""
@@ -26,7 +26,9 @@ class ContextualEnricher:
             {chunk}
             </chunk>
 
-            Responda APENAS com o contexto sucinto e nada mais. Limite seu resultado a no máximo 80 tokens
+            Responda APENAS com o contexto sucinto e nada mais. 
+            Limite sua resposta a no máximo 80 tokens.
+            Sua resposta deve ser no idioma: {language}.
             """
             
             try:
@@ -37,7 +39,7 @@ class ContextualEnricher:
                     max_tokens=80
                 )
                 context = response.choices[0].message.content.strip()
-                # Prepara o chunk final com o contexto [8]
+                # Prepara o chunk final com o contexto
                 final_chunk = f"Contexto: {context}\n\n---\n\n{chunk}"
                 enriched_chunks.append(final_chunk)
                 
