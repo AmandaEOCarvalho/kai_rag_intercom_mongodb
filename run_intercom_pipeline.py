@@ -1,9 +1,8 @@
-# intercom_pipeline.py
+# run_intercom_pipeline.py - Versão Corrigida
 import sys
 import os
-import re
 
-# Adiciona o diretório raiz do projeto ao Python path para que as importações de 'src' funcionem
+# Adiciona o diretório raiz do projeto ao Python path
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
@@ -14,98 +13,9 @@ from src.processing.chunker import LLMChunker
 from src.processing.contextual_enricher import ContextualEnricher
 from src.processing.categorizer import ArticleCategorizer
 from src.utils.embeddings import EmbeddingGenerator
+from src.utils.text_cleaner import TextCleaner
 from src.mongodb.mongodb_client import MongoDBClient
 
-
-# ------------- Limpeza “inteligente” para embeddings -------------
-
-_EMOJI_RE = re.compile(
-    "["                                 # principais blocos de emoji/pictogramas
-    "\U0001F600-\U0001F64F"             # emoticons
-    "\U0001F300-\U0001F5FF"             # símbolos & pictogramas
-    "\U0001F680-\U0001F6FF"             # transportes & mapas
-    "\U0001F1E0-\U0001F1FF"             # bandeiras
-    "\U00002702-\U000027B0"
-    "\U000024C2-\U0001F251"
-    "]",
-    flags=re.UNICODE
-)
-
-_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
-
-HTML_TAGS_RE = re.compile(r"<[^>]+>")
-MD_CODE_FENCE_RE = re.compile(r"```.+?```", flags=re.DOTALL)
-MD_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
-MD_HEADING_RE = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
-_SINGLE_ASTERISK_LINE_RE = re.compile(r"(?m)^\s*\*\s*$")
-MD_HR_RE = re.compile(r"(?m)^\s{0,3}[-*_]{3,}\s*$")
-MD_BOLD_RE = re.compile(r"\*\*([^*]+)\*\*|__([^_]+)__")
-MD_ITALIC_RE = re.compile(r"\*([^*]+)\*|_([^_]+)_")
-_HRULE_RE = re.compile(r"(?m)^\s*(?:\*[\s*]{2,}|[-_]{3,})\s*$")   # *** , * * * , --- , ___
-EXTRANEOUS_TOKENS_RE = re.compile(r"(?:\u200b|\u200c|\u200d|\uFEFF)")  # zero-width etc.
-
-def looks_like_html_or_markdown(text: str) -> bool:
-    """Heurística leve para decidir quando LIMPAR."""
-    if HTML_TAGS_RE.search(text):
-        return True
-    # marcadores típicos de MD / tokens visuais
-    md_markers = ("**", "__", "`", "```", "[", "](", "# ", "\n---", "\r\n---")
-    return any(m in text for m in md_markers)
-
-def minimal_normalize(text: str) -> str:
-    """Quando NÃO limpar: só normaliza espaços/quebras sem perder semântica."""
-    # remove caracteres de controle (mantém \n)
-    text = _CONTROL_CHARS_RE.sub("", text)
-    text = EXTRANEOUS_TOKENS_RE.sub("", text)
-    # colapsa espaços em excesso preservando quebras simples
-    text = re.sub(r"[^\S\r\n]+", " ", text)          # múltiplos espaços -> 1
-    text = re.sub(r"\n{3,}", "\n\n", text)           # 3+ quebras -> 2
-    return text.strip()
-
-def strip_markdown_and_html(text: str) -> str:
-    """Remove HTML/Markdown mantendo o conteúdo semântico."""
-    # HTML
-    text = HTML_TAGS_RE.sub(" ", text)
-
-    # Markdown
-    text = MD_CODE_FENCE_RE.sub(" ", text)           # remove blocos ```code```
-    text = MD_INLINE_CODE_RE.sub(r"\1", text)        # `inline` -> inline
-    text = MD_HEADING_RE.sub("", text)               # remove marcadores de heading
-    text = MD_HR_RE.sub(" ", text)                   # ---- -> espaço
-    text = _SINGLE_ASTERISK_LINE_RE.sub("", text)           
-    text = _HRULE_RE.sub(" ", text)                  
-    text = MD_BOLD_RE.sub(lambda m: m.group(1) or m.group(2) or "", text)
-    text = MD_ITALIC_RE.sub(lambda m: m.group(1) or m.group(2) or "", text)
-
-    # bullets: preserva como “- ” (se existirem)
-    text = re.sub(r"(?m)^\s*[\*\•]\s+", "- ", text)
-
-    return text
-
-def clean_for_embedding(text: str) -> str:
-    """
-    LIMPA quando necessário:
-      - remove HTML/Markdown/artefatos
-      - remove emojis e caracteres de controle
-      - normaliza espaços/quebras
-    Mantém acentos, 'R$', '%', e-mails, @, etc.
-    """
-    # remove emojis & controles
-    text = _EMOJI_RE.sub("", text)
-    text = _CONTROL_CHARS_RE.sub("", text)
-    text = EXTRANEOUS_TOKENS_RE.sub("", text)
-
-    # tira HTML/Markdown se houver
-    if looks_like_html_or_markdown(text):
-        text = strip_markdown_and_html(text)
-
-    # normaliza espaços/quebras (mantém no máx. 2 quebras)
-    text = re.sub(r"[^\S\r\n]+", " ", text)   # colapsa espaços
-    text = re.sub(r"\n{3,}", "\n\n", text)    # 3+ quebras -> 2
-    return text.strip()
-
-
-# ------------------ Intercom / RAG pipeline ---------------------
 
 def list_all_collections(intercom_client: IntercomClient) -> dict:
     """Lista todas as coleções disponíveis na Intercom (para achar a de RAG)."""
@@ -125,6 +35,7 @@ def list_all_collections(intercom_client: IntercomClient) -> dict:
     except Exception as e:
         print(f"❌ Erro ao listar coleções: {e}")
         return {}
+
 
 def is_rag_eligible_article(article: dict, rag_collection_id: str = None, excluded_article_ids: list = None) -> bool:
     """Determina se um artigo é elegível para o RAG baseado na coleção e exclusões."""
@@ -150,10 +61,11 @@ def is_rag_eligible_article(article: dict, rag_collection_id: str = None, exclud
 
     return False
 
+
 def process_single_article(article: dict, components: dict, rag_collection_id: str = None, excluded_article_ids: list = None) -> list:
     """
-    Processa um único artigo da Intercom, aplicando o pipeline de RAG:
-    parse -> categorizar -> chunk -> enriquecer -> limpar (condicional) -> embed -> montar docs
+    Processa um único artigo da Intercom seguindo as melhores práticas:
+    HTML → Markdown → Categorização → Chunking → Contextual Enrichment → Limpeza Condicional → Embeddings
     """
     article_id = article.get("id")
     documents_for_db = []
@@ -175,46 +87,57 @@ def process_single_article(article: dict, components: dict, rag_collection_id: s
 
         print(f"\n📄 Processando Artigo ID: {article_id}, Idioma: {lang}, Estado: {state}")
 
-        # Estágio 1: Parsing básico de HTML -> texto (mantemos entidades/acentos)
+        # ✅ ETAPA 1: HTML → Markdown formatado (preserva estrutura semântica)
         html_body = content["body"]
-        parsed_text = components["text_processor"].process_html_body(html_body)
-        if not parsed_text:
-            print(" -> Artigo pulado: sem texto após parsing.")
+        markdown_text = components["text_processor"].process_html_body(html_body)
+        if not markdown_text:
+            print(" -> Artigo pulado: sem texto após parsing HTML.")
             continue
 
-        # Categorização (usa título + corpo)
+        print(f"📝 Markdown gerado: {len(markdown_text)} chars")
+
+        # ✅ ETAPA 2: Categorização (usa markdown formatado)
         title = content.get("title", f"Artigo {article_id}")
-        category = components["categorizer"].categorize_article(parsed_text, title)
+        category = components["categorizer"].categorize_article(markdown_text, title)
         print(f" -> Categoria identificada: {category}")
 
-        # Estágio 2: Chunking por LLM
-        chunks = components["chunker"].chunk_text(parsed_text)
+        # ✅ ETAPA 3: Chunking semântico (usa markdown formatado)
+        print(" -> Iniciando chunking semântico...")
+        chunks = components["chunker"].chunk_text(markdown_text)
+        print(f" -> Gerados {len(chunks)} chunks semânticos")
 
-        # Estágio 3: Enriquecimento contextual
-        enriched_chunks = components["enricher"].enrich_chunks(chunks, parsed_text)
-        print(f" -> Gerados e enriquecidos {len(enriched_chunks)} chunks.")
+        # ✅ ETAPA 4: Contextual Enrichment (usa markdown formatado)
+        print(" -> Iniciando enriquecimento contextual...")
+        enriched_chunks = components["enricher"].enrich_chunks(chunks, markdown_text)
+        print(f" -> Enriquecidos {len(enriched_chunks)} chunks com contexto")
 
-        # Estágio 4: Limpeza condicional + Embedding(title+content)
+        # ✅ ETAPA 5: Limpeza condicional + Embeddings (APENAS agora limpa para vetor)
+        text_cleaner = components["text_cleaner"]
+        
         for i, contextualized_chunk in enumerate(enriched_chunks):
-            # Decide se precisa LIMPAR
-            # Regra: se já estiver claro/sem marcação, usamos minimal_normalize; senão, clean_for_embedding.
-            if looks_like_html_or_markdown(contextualized_chunk):
-                clean_content = clean_for_embedding(contextualized_chunk)
-            else:
-                clean_content = minimal_normalize(contextualized_chunk)
-
+            print(f" -> Processando chunk {i+1}/{len(enriched_chunks)}...")
+            
+            # Limpeza condicional inteligente
+            clean_content = text_cleaner.clean_contextual_chunk(contextualized_chunk)
+            
             if not clean_content:
+                print(f"   ⚠️ Chunk {i+1} vazio após limpeza, pulando.")
                 continue
 
-            # Embeddings com concatenação de título + conteúdo (melhor sinal semântico)
+            # Embedding com título + conteúdo limpo
             embedding_input = f"{title}\n\n{clean_content}"
             embedding = components["embedding_generator"].generate(embedding_input)
+            
             if not embedding:
+                print(f"   ❌ Falha ao gerar embedding para chunk {i+1}")
                 continue
 
+            print(f"   ✅ Chunk {i+1} processado com sucesso")
+
+            # Documento final para MongoDB
             document = {
                 "title": title,
-                "content": clean_content,  # conteúdo limpo e conciso
+                "content": clean_content,  # Conteúdo otimizado para embeddings
                 "category": category,
                 "language": lang,
                 "embedding": embedding,
@@ -231,12 +154,16 @@ def process_single_article(article: dict, components: dict, rag_collection_id: s
                     "total_chunks": len(enriched_chunks),
                     "embedding_model": Config.EMBEDDING_MODEL,
                     "dimensions": Config.EMBEDDING_DIMENSIONS,
-                    "embedding_input": "title+content"
+                    "embedding_input": "title+content",
+                    "processing_pipeline": "html->markdown->categorize->chunk->enrich->clean->embed"
                 }
             }
             documents_for_db.append(document)
 
+        print(f"✅ Artigo {article_id} processado: {len([d for d in documents_for_db if d['meta_data']['article_id'] == str(article_id)])} documentos gerados")
+
     return documents_for_db
+
 
 def fetch_all_articles_from_collection(intercom_client: IntercomClient, collection_id: str = None) -> dict:
     """Busca TODOS os artigos da Intercom com paginação completa (opcionalmente por coleção)."""
@@ -277,34 +204,41 @@ def fetch_all_articles_from_collection(intercom_client: IntercomClient, collecti
 
 
 def main():
-    """Pipeline principal para buscar e processar artigos da Intercom com foco em coleção RAG."""
+    """
+    Pipeline principal seguindo as melhores práticas do tutorial:
+    - Preserva markdown formatado até o enriquecimento contextual
+    - Aplica limpeza condicional apenas para embeddings
+    - Usa módulo unificado de limpeza de texto
+    """
     try:
         Config.validate()
     except ValueError as e:
         print(f"❌ Erro de configuração: {e}")
         return
 
+    # ✅ Inicializa componentes incluindo o novo TextCleaner
     components = {
         "intercom_client": IntercomClient(),
-        "text_processor": TextProcessor(),
+        "text_processor": TextProcessor(),           # Agora preserva markdown
         "chunker": LLMChunker(),
         "enricher": ContextualEnricher(),
         "categorizer": ArticleCategorizer(),
         "embedding_generator": EmbeddingGenerator(),
+        "text_cleaner": TextCleaner(),              # ✅ Novo componente unificado
         "mongodb_client": MongoDBClient()
     }
 
     print("🚀 Iniciando pipeline de processamento de artigos da Intercom...")
+    print("📋 Pipeline: HTML → Markdown → Categorizar → Chunking → Enriquecimento → Limpeza → Embeddings")
 
-    # ID da coleção RAG (defina se quiser restringir)
-    RAG_COLLECTION_ID = None  # ex.: "123456"
+    # Configurações
+    RAG_COLLECTION_ID = None  # ex.: "123456" para filtrar coleção específica
+    EXCLUDED_ARTICLE_IDS = ["7861154"]  # IDs a excluir
 
-    # IDs a excluir (opcional)
-    EXCLUDED_ARTICLE_IDS = ["7861154"]
-
-    # (Opcional) Listar coleções
+    # (Opcional) Listar coleções para encontrar a ID correta
     # list_all_collections(components["intercom_client"])
 
+    # Busca artigos
     intercom_data = fetch_all_articles_from_collection(
         components["intercom_client"],
         collection_id=RAG_COLLECTION_ID
@@ -316,6 +250,7 @@ def main():
 
     print(f"📊 Total de artigos encontrados: {len(intercom_data['data'])}")
 
+    # Processa artigos
     all_processed_documents = []
     processed_count = 0
     skipped_count = 0
@@ -333,11 +268,13 @@ def main():
         else:
             skipped_count += 1
 
+    # Relatório final
     print(f"\n📈 Resumo do processamento:")
     print(f" • Artigos processados: {processed_count}")
     print(f" • Artigos pulados: {skipped_count}")
     print(f" • Total de documentos gerados: {len(all_processed_documents)}")
 
+    # Salva no MongoDB
     if all_processed_documents:
         print(f"\n💾 Salvando {len(all_processed_documents)} documentos no MongoDB...")
         components["mongodb_client"].upsert_documents(all_processed_documents)
@@ -346,6 +283,7 @@ def main():
         print("❌ Nenhum documento foi gerado a partir dos artigos da Intercom.")
 
     print("\n🎉 Pipeline de artigos da Intercom concluído!")
+    print("📋 Processo seguiu as melhores práticas: markdown preservado até limpeza final para embeddings")
 
 
 if __name__ == "__main__":
