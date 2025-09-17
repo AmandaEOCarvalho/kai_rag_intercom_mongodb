@@ -1,0 +1,7 @@
+openai
+requests
+beautifulsoup4
+html2text
+Pillow
+pymongo
+python-dotenv
