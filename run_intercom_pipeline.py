@@ -1,4 +1,3 @@
-# run_intercom_pipeline.py - Versão Corrigida
 import sys
 import os
 
@@ -62,10 +61,25 @@ def is_rag_eligible_article(article: dict, rag_collection_id: str = None, exclud
     return False
 
 
-def process_single_article(article: dict, components: dict, rag_collection_id: str = None, excluded_article_ids: list = None) -> list:
+def get_allowed_languages(article_id: str, multilingual_article_ids: list) -> list:
+    """
+    Determina quais idiomas processar baseado no ID do artigo.
+    - Para IDs específicos: processa PT, EN, ES
+    - Para demais artigos: apenas PT-BR
+    """
+    if str(article_id) in multilingual_article_ids:
+        return ["pt", "pt-BR", "en", "es"]  # Todos os idiomas para artigos específicos
+    else:
+        return ["pt", "pt-BR"]  # Apenas português para os demais
+
+
+def process_single_article(article: dict, components: dict, rag_collection_id: str = None, 
+                         excluded_article_ids: list = None, multilingual_article_ids: list = None) -> list:
     """
     Processa um único artigo da Intercom seguindo as melhores práticas:
     HTML → Markdown → Categorização → Chunking → Contextual Enrichment → Limpeza Condicional → Embeddings
+    
+    Agora com filtro de idiomas baseado na lista de artigos multilíngues.
     """
     article_id = article.get("id")
     documents_for_db = []
@@ -77,7 +91,16 @@ def process_single_article(article: dict, components: dict, rag_collection_id: s
             print(f" -> Artigo {article_id} pulado: não está na coleção RAG ou não tem conteúdo válido.")
         return documents_for_db
 
+    # Determina quais idiomas processar para este artigo
+    allowed_languages = get_allowed_languages(article_id, multilingual_article_ids or [])
+    print(f"📋 Artigo {article_id} - Idiomas permitidos: {allowed_languages}")
+
     for lang, content in article.get("translated_content", {}).items():
+        # ✅ FILTRO DE IDIOMAS: só processa idiomas permitidos
+        if lang not in allowed_languages:
+            print(f" -> Idioma {lang} pulado para artigo {article_id} (não está na lista permitida)")
+            continue
+            
         if not (isinstance(content, dict) and content.get("body")):
             continue
 
@@ -155,7 +178,8 @@ def process_single_article(article: dict, components: dict, rag_collection_id: s
                     "embedding_model": Config.EMBEDDING_MODEL,
                     "dimensions": Config.EMBEDDING_DIMENSIONS,
                     "embedding_input": "title+content",
-                    "processing_pipeline": "html->markdown->categorize->chunk->enrich->clean->embed"
+                    "processing_pipeline": "html->markdown->categorize->chunk->enrich->clean->embed",
+                    "is_multilingual_article": str(article_id) in (multilingual_article_ids or [])
                 }
             }
             documents_for_db.append(document)
@@ -209,6 +233,7 @@ def main():
     - Preserva markdown formatado até o enriquecimento contextual
     - Aplica limpeza condicional apenas para embeddings
     - Usa módulo unificado de limpeza de texto
+    - ✅ NOVO: Filtra idiomas baseado em lista de artigos multilíngues
     """
     try:
         Config.validate()
@@ -230,10 +255,22 @@ def main():
 
     print("🚀 Iniciando pipeline de processamento de artigos da Intercom...")
     print("📋 Pipeline: HTML → Markdown → Categorizar → Chunking → Enriquecimento → Limpeza → Embeddings")
+    print("🌍 Estratégia de idiomas: PT-BR por padrão, múltiplos idiomas para artigos específicos")
 
-    # Configurações
+    # ✅ CONFIGURAÇÕES ATUALIZADAS
     RAG_COLLECTION_ID = None  # ex.: "123456" para filtrar coleção específica
     EXCLUDED_ARTICLE_IDS = ["7861154"]  # IDs a excluir
+    
+    # ✅ NOVA CONFIGURAÇÃO: IDs que devem ter todos os idiomas (PT, EN, ES)
+    MULTILINGUAL_ARTICLE_IDS = [
+        "7861149", "7915496", "8411647", "8887223", "7915619",
+        "7861109", "10008263", "7885145", "7992438", "7914908"
+    ]
+
+    print(f"\n📊 Configuração de idiomas:")
+    print(f" • Artigos multilíngues (PT/EN/ES): {len(MULTILINGUAL_ARTICLE_IDS)} IDs")
+    print(f" • Demais artigos: apenas PT-BR")
+    print(f" • IDs multilíngues: {', '.join(MULTILINGUAL_ARTICLE_IDS)}")
 
     # (Opcional) Listar coleções para encontrar a ID correta
     # list_all_collections(components["intercom_client"])
@@ -254,25 +291,49 @@ def main():
     all_processed_documents = []
     processed_count = 0
     skipped_count = 0
+    multilingual_processed = 0
+    ptbr_only_processed = 0
 
     for article in intercom_data["data"]:
+        article_id = str(article.get("id", ""))
+        
         processed_docs = process_single_article(
             article,
             components,
             RAG_COLLECTION_ID,
-            EXCLUDED_ARTICLE_IDS
+            EXCLUDED_ARTICLE_IDS,
+            MULTILINGUAL_ARTICLE_IDS  # ✅ Passa a nova lista
         )
+        
         if processed_docs:
             all_processed_documents.extend(processed_docs)
             processed_count += 1
+            
+            # Conta estatísticas por tipo
+            if article_id in MULTILINGUAL_ARTICLE_IDS:
+                multilingual_processed += 1
+            else:
+                ptbr_only_processed += 1
         else:
             skipped_count += 1
 
-    # Relatório final
+    # Relatório final detalhado
     print(f"\n📈 Resumo do processamento:")
     print(f" • Artigos processados: {processed_count}")
+    print(f"   - Multilíngues (PT/EN/ES): {multilingual_processed}")
+    print(f"   - Apenas PT-BR: {ptbr_only_processed}")
     print(f" • Artigos pulados: {skipped_count}")
     print(f" • Total de documentos gerados: {len(all_processed_documents)}")
+    
+    # Estatísticas por idioma
+    lang_stats = {}
+    for doc in all_processed_documents:
+        lang = doc.get("language", "unknown")
+        lang_stats[lang] = lang_stats.get(lang, 0) + 1
+    
+    print(f"\n🌍 Distribuição por idioma:")
+    for lang, count in sorted(lang_stats.items()):
+        print(f" • {lang.upper()}: {count} documentos")
 
     # Salva no MongoDB
     if all_processed_documents:
@@ -284,6 +345,7 @@ def main():
 
     print("\n🎉 Pipeline de artigos da Intercom concluído!")
     print("📋 Processo seguiu as melhores práticas: markdown preservado até limpeza final para embeddings")
+    print("🌍 Filtro de idiomas aplicado: multilíngue para IDs específicos, PT-BR para demais")
 
 
 if __name__ == "__main__":

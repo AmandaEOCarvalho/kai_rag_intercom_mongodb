@@ -13,6 +13,23 @@ from src.processing.contextual_enricher import ContextualEnricher
 from src.processing.categorizer import ArticleCategorizer
 from src.utils.embeddings import EmbeddingGenerator
 from src.utils.text_cleaner import TextCleaner  # ✅ Novo módulo unificado
+# ✅ NOVA CONFIGURAÇÃO: IDs que devem ter todos os idiomas (PT, EN, ES)
+MULTILINGUAL_ARTICLE_IDS = [
+    "7861149", "7915496", "8411647", "8887223", "7915619",
+    "7861109", "10008263", "7885145", "7992438", "7914908"
+]
+
+# Função igual ao pipeline principal
+def get_allowed_languages(article_id: str, multilingual_article_ids: list) -> list:
+    """
+    Determina quais idiomas processar baseado no ID do artigo.
+    - Para IDs específicos: processa PT, EN, ES
+    - Para demais artigos: apenas PT-BR
+    """
+    if str(article_id) in multilingual_article_ids:
+        return ["pt", "pt-BR", "en", "es"]  # Todos os idiomas para artigos específicos
+    else:
+        return ["pt", "pt-BR"]  # Aceita pt e pt-BR para os demais
 
 
 def is_rag_eligible_article(article: dict, rag_collection_id: str = None, excluded_article_ids: list = None) -> bool:
@@ -52,7 +69,17 @@ def process_single_article_test(article: dict, components: dict, rag_collection_
             print(f" -> Artigo {article_id} pulado: não está na coleção RAG ou não tem conteúdo válido.")
         return documents_for_db
 
+
+    # Determina quais idiomas processar para este artigo
+    allowed_languages = get_allowed_languages(article_id, MULTILINGUAL_ARTICLE_IDS)
+    print(f"📋 Artigo {article_id} - Idiomas permitidos: {allowed_languages}")
+
     for lang, content in article.get("translated_content", {}).items():
+        # ✅ FILTRO DE IDIOMAS: só processa idiomas permitidos
+        if lang not in allowed_languages:
+            print(f" -> Idioma {lang} pulado para artigo {article_id} (não está na lista permitida)")
+            continue
+
         if not (isinstance(content, dict) and content.get("body")):
             continue
 
