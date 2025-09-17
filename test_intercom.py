@@ -200,8 +200,6 @@ def process_single_article_test(article: dict, components: dict, rag_collection_
                     "total_chunks": len(enriched_chunks),
                     "embedding_model": Config.EMBEDDING_MODEL,
                     "dimensions": Config.EMBEDDING_DIMENSIONS,
-                    "embedding_input": "title+content",
-                    "processing_pipeline": "html->markdown->categorize->chunk->enrich->clean->embed",
                     "cleaned_conditionally": needs_cleaning
                 }
             }

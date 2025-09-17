@@ -182,8 +182,6 @@ def process_single_article(article: dict, components: dict, rag_collection_id: s
                     "total_chunks": len(enriched_chunks),
                     "embedding_model": Config.EMBEDDING_MODEL,
                     "dimensions": Config.EMBEDDING_DIMENSIONS,
-                    "embedding_input": "title+content",
-                    "processing_pipeline": "html->markdown->categorize->chunk->enrich->clean->embed",
                     "is_multilingual_article": str(article_id) in (multilingual_article_ids or [])
                 }
             }
