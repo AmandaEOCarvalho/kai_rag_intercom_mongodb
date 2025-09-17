@@ -70,13 +70,17 @@ def process_single_article_test(article: dict, components: dict, rag_collection_
         return documents_for_db
 
 
-    # Determina quais idiomas processar para este artigo
-    allowed_languages = get_allowed_languages(article_id, MULTILINGUAL_ARTICLE_IDS)
-    print(f"📋 Artigo {article_id} - Idiomas permitidos: {allowed_languages}")
+    # Se for coleção RAG, processa todos os idiomas disponíveis
+    if rag_collection_id:
+        allowed_languages = list(article.get("translated_content", {}).keys())
+        print(f"📋 Artigo {article_id} (coleção RAG) - Todos idiomas permitidos: {allowed_languages}")
+    else:
+        allowed_languages = get_allowed_languages(article_id, MULTILINGUAL_ARTICLE_IDS)
+        print(f"📋 Artigo {article_id} - Idiomas permitidos: {allowed_languages}")
 
     for lang, content in article.get("translated_content", {}).items():
-        # ✅ FILTRO DE IDIOMAS: só processa idiomas permitidos
-        if lang not in allowed_languages:
+        # Se for coleção RAG, não filtra idiomas
+        if not rag_collection_id and lang not in allowed_languages:
             print(f" -> Idioma {lang} pulado para artigo {article_id} (não está na lista permitida)")
             continue
 
