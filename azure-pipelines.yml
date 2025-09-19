@@ -1,0 +1,330 @@
+# azure-pipelines.yml
+# Azure DevOps Pipeline para sincronização de artigos do Intercom
+# Executa automaticamente diariamente às 2:00 UTC
+
+trigger: none  # Não executa em push - apenas no schedule
+
+pr: none  # Não executa em pull requests
+
+# ⏰ AGENDAMENTO AUTOMÁTICO
+schedules:
+  # # A cada 2 horas (horário UTC)
+  # - cron: '0 */2 * * *'
+  #   displayName: 'Sync a cada 2 horas'
+  #   branches:
+  #     include:
+  #       - main
+  #       - master
+  #   always: true  # Executa mesmo sem mudanças no código
+
+  # Sincronização completa diária às 2:00 UTC
+  - cron: '0 2 * * *'
+    displayName: 'Sync diário completo às 2:00 UTC'
+    branches:
+      include:
+        - main
+        - master
+    always: true
+
+  # # Sincronização adicional às 14:00 UTC (opcional)
+  # - cron: '0 14 * * *'
+  #   displayName: 'Sync adicional às 14:00 UTC'
+  #   branches:
+  #     include:
+  #       - main
+  #       - master
+  #   always: true
+
+# 🎯 POOL DE AGENTES
+pool:
+  vmImage: 'ubuntu-latest'  # Pode usar windows-latest se preferir
+
+# 📋 VARIÁVEIS DO PIPELINE
+variables:
+  - name: pythonVersion
+    value: '3.11'
+  - name: workingDirectory
+    value: '$(System.DefaultWorkingDirectory)'
+
+# 🚀 JOBS
+jobs:
+  - job: IntercomSync
+    displayName: 'Sincronização Artigos Intercom → MongoDB'
+    timeoutInMinutes: 60  # Timeout de 1 hora
+    
+    # 📦 STEPS
+    steps:
+      # 1. Checkout do código
+      - checkout: self
+        displayName: '📥 Checkout do repositório'
+        clean: true
+
+      # 2. Setup Python
+      - task: UsePythonVersion@0
+        displayName: '🐍 Setup Python $(pythonVersion)'
+        inputs:
+          versionSpec: '$(pythonVersion)'
+
+      # 3. Cache das dependências Python
+      - task: Cache@2
+        displayName: '📦 Cache dependências Python'
+        inputs:
+          key: 'python | "$(Agent.OS)" | requirements.txt'
+          restoreKeys: |
+            python | "$(Agent.OS)"
+            python
+          path: ~/.cache/pip
+
+      # 4. Instala dependências
+      - script: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+        displayName: '📚 Instalar dependências'
+        workingDirectory: '$(workingDirectory)'
+
+      # 5. Verificação de saúde das APIs
+      - script: |
+          python -c "
+          import os
+          from src.api.intercom_client import IntercomClient
+          from src.mongodb.mongodb_client import MongoDBClient
+          
+          print('🔍 Testando conexões...')
+          
+          # Testa Intercom
+          try:
+              client = IntercomClient()
+              if client.test_connection():
+                  print('✅ Intercom API: OK')
+              else:
+                  print('❌ Intercom API: FALHOU')
+                  exit(1)
+          except Exception as e:
+              print(f'❌ Erro Intercom: {e}')
+              exit(1)
+          
+          # Testa MongoDB
+          try:
+              mongo = MongoDBClient()
+              mongo.connect()
+              print('✅ MongoDB: OK')
+              mongo.close_connection()
+          except Exception as e:
+              print(f'❌ Erro MongoDB: {e}')
+              exit(1)
+              
+          print('✅ Todas as conexões OK!')
+          "
+        displayName: '🔍 Verificar conexões API'
+        workingDirectory: '$(workingDirectory)'
+        env:
+          OPENAI_API_KEY: $(OPENAI_API_KEY)
+          INTERCOM_API_TOKEN: $(INTERCOM_API_TOKEN)
+          INTERCOM_BASE_URL: $(INTERCOM_BASE_URL)
+          MONGODB_CONNECTION_STRING: $(MONGODB_CONNECTION_STRING)
+          DATABASE_NAME: $(DATABASE_NAME)
+          COLLECTION_NAME: $(COLLECTION_NAME)
+
+      # 6. Execução principal da sincronização
+      - script: |
+          echo "🔄 Iniciando sincronização de artigos..."
+          echo "📅 Horário: $(date)"
+          echo "🔖 Trigger: $(Build.CronSchedule.DisplayName)"
+          echo "🌿 Branch: $(Build.SourceBranch)"
+          echo ""
+          
+          # Executa o pipeline principal
+          python run_intercom_pipeline.py
+          
+          echo ""
+          echo "✅ Sincronização concluída em $(date)"
+        displayName: '🔄 Executar sincronização'
+        workingDirectory: '$(workingDirectory)'
+        env:
+          OPENAI_API_KEY: $(OPENAI_API_KEY)
+          INTERCOM_API_TOKEN: $(INTERCOM_API_TOKEN)
+          INTERCOM_BASE_URL: $(INTERCOM_BASE_URL)
+          MONGODB_CONNECTION_STRING: $(MONGODB_CONNECTION_STRING)
+          DATABASE_NAME: $(DATABASE_NAME)
+          COLLECTION_NAME: $(COLLECTION_NAME)
+          EMBEDDING_MODEL: $(EMBEDDING_MODEL)
+          RAG_SYNTH_MODEL: $(RAG_SYNTH_MODEL)
+          RAG_IMAGE_PROCESSOR_MODEL: $(RAG_IMAGE_PROCESSOR_MODEL)
+          RAG_CONTEXTUAL_ENRICHER_MODEL: $(RAG_CONTEXTUAL_ENRICHER_MODEL)
+          RAG_CHUNKER_MODEL: $(RAG_CHUNKER_MODEL)
+          RAG_CATEGORIZER_MODEL: $(RAG_CATEGORIZER_MODEL)
+          EMBEDDING_DIMENSIONS: $(EMBEDDING_DIMENSIONS)
+          MAX_CHUNK_SIZE: $(MAX_CHUNK_SIZE)
+
+      # 7. Coleta de métricas pós-execução
+      - script: |
+          python -c "
+          import json
+          from datetime import datetime
+          from src.mongodb.mongodb_client import MongoDBClient
+          
+          print('📊 Coletando métricas pós-sincronização...')
+          
+          try:
+              mongo = MongoDBClient()
+              collection = mongo.connect()
+              
+              # Conta documentos por idioma
+              pipeline = [
+                  {'\\$group': {
+                      '_id': '\\$language',
+                      'count': {'\\$sum': 1},
+                      'last_update': {'\\$max': '\\$meta_data.last_worker_sync'}
+                  }},
+                  {'\\$sort': {'count': -1}}
+              ]
+              
+              results = list(collection.aggregate(pipeline))
+              
+              print('📈 Resumo da base de conhecimento:')
+              total = 0
+              for result in results:
+                  lang = result['_id'] or 'unknown'
+                  count = result['count']
+                  total += count
+                  print(f'   • {lang.upper()}: {count:,} documentos')
+              
+              print(f'   • TOTAL: {total:,} documentos')
+              print('📅 Sincronização executada com sucesso!')
+              
+              mongo.close_connection()
+              
+          except Exception as e:
+              print(f'⚠️ Erro ao coletar métricas: {e}')
+          "
+        displayName: '📊 Métricas finais'
+        workingDirectory: '$(workingDirectory)'
+        env:
+          MONGODB_CONNECTION_STRING: $(MONGODB_CONNECTION_STRING)
+          DATABASE_NAME: $(DATABASE_NAME)
+          COLLECTION_NAME: $(COLLECTION_NAME)
+        condition: always()  # Sempre executa, mesmo se o step anterior falhar
+
+      # 8. Cleanup (opcional)
+      - script: |
+          echo "🧹 Limpando arquivos temporários..."
+          # Remove logs antigos, cache, etc.
+        displayName: '🧹 Cleanup'
+        condition: always()
+
+  # 🚨 JOB CONDICIONAL: Notificação em caso de falha
+  - job: NotifyFailure
+    displayName: 'Notificar falha via Teams/Slack'
+    dependsOn: IntercomSync
+    condition: failed()
+    
+    steps:
+      # Notificação via webhook (Teams, Slack, etc.)
+      - script: |
+          curl -X POST "$(TEAMS_WEBHOOK_URL)" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "text": "🚨 FALHA na sincronização de artigos do Intercom",
+              "summary": "Pipeline $(Build.BuildNumber) falhou",
+              "sections": [{
+                "facts": [
+                  {"name": "Pipeline", "value": "$(Build.DefinitionName)"},
+                  {"name": "Build", "value": "$(Build.BuildNumber)"},
+                  {"name": "Branch", "value": "$(Build.SourceBranch)"},
+                  {"name": "Trigger", "value": "$(Build.CronSchedule.DisplayName)"},
+                  {"name": "Horário", "value": "'$(date)'"}
+                ]
+              }]
+            }'
+        displayName: '🔔 Notificar falha'
+        condition: and(failed(), ne(variables['TEAMS_WEBHOOK_URL'], ''))
+
+# 🎯 JOBS OPCIONAIS PARA DIFERENTES CENÁRIOS
+
+  # Job para sincronização manual com parâmetros
+  - job: ManualSync
+    displayName: 'Sincronização Manual (apenas quando disparado manualmente)'
+    condition: eq(variables['Build.Reason'], 'Manual')
+    
+    steps:
+      - checkout: self
+      
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: '3.11'
+      
+      - script: pip install -r requirements.txt
+        displayName: 'Instalar dependências'
+      
+      - script: |
+          echo "🔧 SINCRONIZAÇÃO MANUAL"
+          echo "Parâmetros personalizados podem ser adicionados aqui..."
+          python run_intercom_pipeline.py --manual
+        displayName: 'Execução manual'
+        env:
+          OPENAI_API_KEY: $(OPENAI_API_KEY)
+          INTERCOM_API_TOKEN: $(INTERCOM_API_TOKEN)
+          MONGODB_CONNECTION_STRING: $(MONGODB_CONNECTION_STRING)
+
+  # Job para validação de qualidade dos dados
+  - job: DataQuality
+    displayName: 'Validação qualidade dos dados'
+    dependsOn: IntercomSync
+    condition: succeeded()
+    
+    steps:
+      - checkout: self
+      
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: '3.11'
+      
+      - script: pip install -r requirements.txt
+        displayName: 'Instalar dependências'
+      
+      - script: |
+          python -c "
+          from src.mongodb.mongodb_client import MongoDBClient
+          import statistics
+          
+          print('🔍 Validando qualidade dos dados...')
+          
+          mongo = MongoDBClient()
+          collection = mongo.connect()
+          
+          # Verifica documentos sem embedding
+          no_embedding = collection.count_documents({
+              'embedding': {'\\$exists': False}
+          })
+          
+          # Verifica documentos com conteúdo muito curto
+          short_content = collection.count_documents({
+              'content': {'\\$regex': '^.{0,50}$'}
+          })
+          
+          # Estatísticas de tamanho de conteúdo
+          docs = list(collection.find({}, {'content': 1}).limit(1000))
+          sizes = [len(doc.get('content', '')) for doc in docs]
+          
+          if sizes:
+              avg_size = statistics.mean(sizes)
+              print(f'📏 Tamanho médio do conteúdo: {avg_size:.0f} chars')
+              print(f'📊 Min: {min(sizes)}, Max: {max(sizes)}')
+          
+          print(f'⚠️ Documentos sem embedding: {no_embedding}')
+          print(f'⚠️ Documentos com conteúdo muito curto: {short_content}')
+          
+          # Falha se muitos problemas
+          if no_embedding > 10 or short_content > 50:
+              print('❌ QUALIDADE DOS DADOS ABAIXO DO ESPERADO!')
+              exit(1)
+          else:
+              print('✅ Qualidade dos dados OK')
+          
+          mongo.close_connection()
+          "
+        displayName: 'Verificar qualidade'
+        env:
+          MONGODB_CONNECTION_STRING: $(MONGODB_CONNECTION_STRING)
+          DATABASE_NAME: $(DATABASE_NAME)
+          COLLECTION_NAME: $(COLLECTION_NAME)
