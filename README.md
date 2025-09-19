@@ -2,7 +2,7 @@
 
 Pipeline automatizado para processar artigos do Intercom Help Center usando **Contextual Retrieval** da Anthropic, com análise de imagens por VLM e chunking semântico inteligente.
 
-## Funcionalidades
+## 🚀 Funcionalidades
 
 - **Busca incremental** de artigos via API do Intercom
 - **Processamento de imagens** com GPT-4 Vision para converter imagens em descrições textuais
@@ -10,57 +10,70 @@ Pipeline automatizado para processar artigos do Intercom Help Center usando **Co
 - **Contextual Retrieval** baseado na metodologia da Anthropic para melhorar precisão de busca em ~35%
 - **Embeddings vetoriais** com OpenAI `text-embedding-3-small`
 - **Storage MongoDB** com upsert idempotente
+- **Suporte multilíngue** com filtros personalizáveis por artigo
+- **Categorização automática** de artigos por tipo de conteúdo
 
-## Arquitetura do Pipeline
+## 🏗️ Arquitetura do Pipeline
 
 ```
-1. Intercom API → 2. Image Processing (GPT-4V) → 3. LLM Chunking → 
-4. Contextual Enrichment → 5. Embeddings → 6. MongoDB Storage
+Intercom API → Image Processing (GPT-4V) → HTML→Markdown → Categorização → 
+LLM Chunking → Contextual Enrichment → Limpeza Condicional → Embeddings → MongoDB Storage
 ```
 
 ### Etapas do Processamento
 
 1. **Parsing & Image Analysis**
-   - Converte HTML para texto limpo
+   - Converte HTML para Markdown preservando estrutura semântica
    - Usa GPT-4 Vision para descrever imagens em contexto
-   - Remove imagens decorativas de cabeçalhos
+   - Remove imagens decorativas de cabeçalhos automaticamente
 
-2. **LLM Chunking Semântico**
+2. **Categorização Inteligente**
+   - Classifica artigos em: `technical_support`, `features`, `billing_plans_and_pricing`, `troubleshooting`, `how_to`
+   - Usa LLM para análise de título + conteúdo
+
+3. **LLM Chunking Semântico**
    - GPT decide onde dividir o texto baseado no conteúdo
    - Separa por plataformas (Kyte PDV, Kyte Web)
    - Mantém coerência semântica em cada chunk
 
-3. **Contextual Enrichment**
+4. **Contextual Enrichment**
    - Adiciona contexto a cada chunk usando metodologia da Anthropic
-   - Formato: `"Contexto: [explicação] [chunk original]"`
+   - Formato: `"Contexto: [explicação]\n---\n[chunk original]"`
    - Melhora significativamente a precisão do retrieval
 
-## Estrutura do Projeto
+5. **Limpeza Condicional**
+   - Aplica limpeza inteligente apenas quando necessário
+   - Preserva formatação semântica até o final do pipeline
+   - Remove apenas ruídos visuais para otimizar embeddings
+
+## 📁 Estrutura do Projeto
 
 ```
 intercom-rag-pipeline/
-├── .env                        # Variáveis de ambiente
-├── .gitignore                  # Arquivos ignorados pelo Git
-├── requirements.txt            # Dependências Python
-├── README.md                   # Esta documentação
+├── .env                           # Variáveis de ambiente
+├── .gitignore                     # Arquivos ignorados pelo Git
+├── requirements.txt               # Dependências Python
+├── README.md                      # Esta documentação
+├── run_intercom_pipeline.py       # Script principal
 ├── config/
-│   └── settings.py            # Configurações centralizadas
-├── src/
-│   ├── api/
-│   │   └── intercom_client.py # Cliente API Intercom
-│   ├── processing/
-│   │   ├── image_processor.py  # Análise de imagens (GPT-4V)
-│   │   ├── text_processor.py   # Processamento HTML→Markdown
-│   │   ├── chunker.py         # LLM Chunking semântico
-│   │   └── contextual_enricher.py # Contextual Retrieval
-│   ├── storage/
-│   │   └── mongodb_client.py  # Cliente MongoDB
-│   └── utils/
-│       └── embeddings.py      # Geração de embeddings
-└── main.py                    # Pipeline principal
+│   └── settings.py               # Configurações centralizadas
+└── src/
+    ├── api/
+    │   └── intercom_client.py    # Cliente API Intercom
+    ├── processing/
+    │   ├── image_processor.py     # Análise de imagens (GPT-4V)
+    │   ├── text_processor.py      # HTML→Markdown preservando estrutura
+    │   ├── chunker.py            # LLM Chunking semântico
+    │   ├── contextual_enricher.py # Contextual Retrieval
+    │   └── categorizer.py        # Categorização automática
+    ├── mongodb/
+    │   └── mongodb_client.py     # Cliente MongoDB
+    └── utils/
+        ├── embeddings.py         # Geração de embeddings
+        └── text_cleaner.py       # Limpeza condicional unificada
 ```
 
-## Instalação
+## ⚡ Instalação
 
 ### Pré-requisitos
 - Python 3.8+
@@ -68,7 +81,7 @@ intercom-rag-pipeline/
 - Conta OpenAI com acesso à API
 - Token de acesso do Intercom
 
-### Setup
+### Setup Rápido
 
 1. **Clone o repositório**
 ```bash
@@ -88,70 +101,120 @@ cp .env.example .env
 
 Edite o arquivo `.env` com suas credenciais:
 ```env
+# OpenAI
 OPENAI_API_KEY=sk-your-key-here
+
+# Intercom
 INTERCOM_API_TOKEN=your-intercom-token
+INTERCOM_BASE_URL=https://api.intercom.io
+
+# MongoDB
 MONGODB_CONNECTION_STRING=mongodb+srv://user:pass@cluster.mongodb.net/
 KYTE_DBNAME_AI=kyte-ai
+KYTE_COLLECTION_NAME=KyteFAQKnowledgeBase
+
+# Modelos AI
+EMBEDDING_MODEL=text-embedding-3-small
+RAG_SYNTH_MODEL=gpt-4o-mini
+RAG_IMAGE_PROCESSOR_MODEL=gpt-4o
+RAG_CONTEXTUAL_ENRICHER_MODEL=gpt-4o-mini
+RAG_CHUNKER_MODEL=gpt-4o-mini
+RAG_CATEGORIZER_MODEL=gpt-4o-mini
+
+# Configurações
+MAX_CHUNK_SIZE=2000
+EMBEDDING_DIMENSIONS=1536
 ```
 
 4. **Execute o pipeline**
 ```bash
-python main.py
+python run_intercom_pipeline.py
 ```
 
-## Configuração
+## ⚙️ Configuração Avançada
 
-### Variáveis de Ambiente Obrigatórias
+### Filtros de Idioma por Artigo
 
-| Variável | Descrição | Exemplo |
-|----------|-----------|---------|
-| `OPENAI_API_KEY` | Chave da API OpenAI | `sk-proj-...` |
-| `INTERCOM_API_TOKEN` | Token de acesso Intercom | `dG9rXYZ...` |
-| `MONGODB_CONNECTION_STRING` | String de conexão MongoDB | `mongodb+srv://...` |
+O pipeline suporta configuração granular de idiomas:
 
-### Configurações Opcionais
+```python
+# IDs que devem processar todos os idiomas (PT, EN, ES)
+MULTILINGUAL_ARTICLE_IDS = [
+    "7861149", "7915496", "8411647", "8887223", "7915619",
+    "7861109", "10008263", "7885145", "7992438", "7914908"
+]
 
-| Variável | Padrão | Descrição |
-|----------|---------|-----------|
-| `KYTE_DBNAME_AI` | `kyte-ai` | Nome do database MongoDB |
-| `MAX_CHUNK_SIZE` | `2000` | Tamanho máximo dos chunks |
-| `EMBEDDING_MODEL` | `text-embedding-3-small` | Modelo de embedding |
+# Demais artigos processam apenas PT-BR
+# Artigos excluídos do processamento
+EXCLUDED_ARTICLE_IDS = ["7861154"]
+```
 
-## Uso
+### Filtro por Coleção RAG
+
+```python
+# Para processar apenas artigos de uma coleção específica
+RAG_COLLECTION_ID = "123456"  # None para processar todos
+```
+
+## 🎯 Uso
 
 ### Execução Básica
 ```bash
-python main.py
+python run_intercom_pipeline.py
 ```
 
-### Processamento Incremental (Futuro)
-```bash
-# Buscar apenas artigos atualizados desde última execução
-python main.py --incremental
+### Logs Detalhados
+O pipeline fornece logs completos do processamento:
 
-# Processar artigo específico
-python main.py --article-id 12260744
+```
+🚀 Iniciando pipeline de processamento de artigos da Intercom...
+📋 Pipeline: HTML → Markdown → Categorizar → Chunking → Enriquecimento → Limpeza → Embeddings
+🌍 Estratégia de idiomas: PT-BR por padrão, múltiplos idiomas para artigos específicos
+
+📊 Total de artigos encontrados: 45
+📄 Processando Artigo ID: 7861149, Idioma: pt-BR, Estado: published
+ -> Categoria identificada: how_to
+ -> Iniciando chunking semântico...
+ -> Gerados 3 chunks semânticos
+ -> Iniciando enriquecimento contextual...
+ -> Enriquecidos 3 chunks com contexto
+✅ Artigo 7861149 processado: 3 documentos gerados
+
+📈 Resumo do processamento:
+ • Artigos processados: 42
+   - Multilíngues (PT/EN/ES): 10
+   - Apenas PT-BR: 32
+ • Artigos pulados: 3
+ • Total de documentos gerados: 156
+
+💾 Salvando 156 documentos no MongoDB...
+✅ Documentos salvos com sucesso!
 ```
 
-## Estrutura dos Dados
+## 📊 Estrutura dos Dados
 
 ### Documento no MongoDB
 ```json
 {
   "title": "Como cadastrar produtos fracionados no Kyte",
-  "content": "Contexto: Este documento aborda... [chunk original]",
-  "category": "help_center",
+  "content": "[Contexto: Este chunk explica o cadastro de produtos fracionados no Kyte PDV] Para cadastrar um produto fracionado...",
+  "category": "how_to",
   "language": "pt-BR",
   "embedding": [0.123, -0.456, ...],
   "meta_data": {
-    "source_type": "intercom_contextual",
+    "source_type": "intercom_help_center_article",
     "article_id": "12260744",
     "intercom_url": "https://docs.kyteapp.com/...",
+    "intercomCreatedAt": "2024-01-15T10:30:00Z",
+    "intercomUpdatedAt": "2024-01-20T14:45:00Z",
+    "article_state": "published",
+    "rag_collection_id": null,
     "is_chunked": true,
     "chunk_index": 0,
     "total_chunks": 4,
     "embedding_model": "text-embedding-3-small",
-    "dimensions": 1536
+    "dimensions": 1536,
+    "is_multilingual_article": false
   }
 }
 ```
@@ -165,90 +228,22 @@ python main.py --article-id 12260744
 }
 ```
 
-## Performance e Custos
-
-### Métricas Esperadas
-- **Melhoria no retrieval**: ~35% de precisão adicional (baseado no paper da Anthropic)
-- **Chunking semântico**: Chunks mais coerentes vs divisão mecânica
-- **Processamento de imagens**: 100% das imagens convertidas para texto
-
-### Custos Estimados (OpenAI)
-- **GPT-4V (imagens)**: ~$0.01 por imagem processada
-- **GPT-4o-mini (chunking)**: ~$0.001 por artigo
-- **GPT-4o-mini (contexto)**: ~$0.002 por chunk
-- **Embeddings**: ~$0.0001 por chunk
-
-## Desenvolvimento
-
-### Adicionando Novos Processadores
-```python
-# src/processing/new_processor.py
-class NewProcessor:
-    def process(self, data):
-        # Sua lógica aqui
-        return processed_data
-```
-
-### Executando Testes
-```bash
-# Executar com apenas 1 artigo para teste
-python main.py --test-mode
-```
-
-## Roadmap
-
-### Próximas Implementações
-- [ ] **Sincronização incremental** com `updated_at`
-- [ ] **Scheduler automatizado** (cron/Cloud Scheduler)  
-- [ ] **Webhooks Intercom** para sync em tempo real
-- [ ] **Sistema de checkpoint** (`SyncMeta` collection)
-- [ ] **Categorização automática** de artigos
-- [ ] **Métricas e dashboards**
-- [ ] **BM25 + Reranking** para 67% de melhoria (paper Anthropic)
-
-### Melhorias Técnicas
-- [ ] Cache de embeddings para evitar reprocessamento
-- [ ] Batch processing para otimização de custos
-- [ ] Retry logic robusto para APIs
-- [ ] Logging estruturado
-- [ ] Testes unitários
-
-## Troubleshooting
-
-### Problemas Comuns
-
-**Erro: "OPENAI_API_KEY not found"**
-```bash
-# Verifique se o .env está configurado corretamente
-echo $OPENAI_API_KEY
-```
-
-**MongoDB Connection Timeout**
-```bash
-# Verifique se o IP está liberado no MongoDB Atlas
-# Teste a conexão manualmente
-```
-
-**Rate Limit OpenAI**
-```bash
-# O pipeline tem retry automático, mas pode ser necessário
-# reduzir o volume de processamento simultâneo
-```
-
-## Contribuição
-
-1. Fork o repositório
-2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
-3. Commit suas mudanças (`git commit -am 'Adiciona nova feature'`)
-4. Push para a branch (`git push origin feature/nova-feature`)
-5. Abra um Pull Request
-
-## Licença
-
-MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-## Referências
+## 📚 Referências
 
 - [Contextual Retrieval - Anthropic](https://www.anthropic.com/news/contextual-retrieval)
 - [Intercom API Documentation](https://developers.intercom.com/docs/)
 - [OpenAI Embeddings Guide](https://platform.openai.com/docs/guides/embeddings)
+- [MongoDB Python Driver](https://pymongo.readthedocs.io/)
+- [Best Practices for RAG](https://docs.llamaindex.ai/en/stable/optimizing/production_rag/)
+
+---
+
+## 🎯 Quick Start Checklist
+
+- [ ] Clone o repositório
+- [ ] Instalar dependências (`pip install -r requirements.txt`)
+- [ ] Configurar `.env` com todas as chaves
+- [ ] Testar conexões (OpenAI, Intercom, MongoDB)
+- [ ] Executar pipeline (`python run_intercom_pipeline.py`)
+- [ ] Verificar dados no MongoDB
+- [ ] Configurar filtros de idioma se necessário
