@@ -9,17 +9,24 @@ class Config:
     
     # Intercom
     INTERCOM_API_TOKEN = os.getenv("INTERCOM_API_TOKEN")
-    INTERCOM_BASE_URL = "https://api.intercom.io"
+    INTERCOM_BASE_URL = os.getenv("INTERCOM_BASE_URL")
     
     # MongoDB
     MONGODB_CONNECTION_STRING = os.getenv("MONGODB_CONNECTION_STRING")
-    DATABASE_NAME = os.getenv("KYTE_DBNAME_AI", "kyte-ai")
-    COLLECTION_NAME = "KyteFAQKnowledgeBase"
+    DATABASE_NAME = os.getenv("KYTE_DBNAME_AI")
+    COLLECTION_NAME = os.getenv("KYTE_COLLECTION_NAME")
     
     # Processing Settings
-    MAX_CHUNK_SIZE = 2000
-    EMBEDDING_MODEL = "text-embedding-3-small"
-    EMBEDDING_DIMENSIONS = 1536
+    ## AI Models
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
+    RAG_SYNTH_MODEL = os.getenv("RAG_SYNTH_MODEL")
+    RAG_IMAGE_PROCESSOR_MODEL = os.getenv("RAG_IMAGE_PROCESSOR_MODEL")
+    RAG_CONTEXTUAL_ENRICHER_MODEL = os.getenv("RAG_CONTEXTUAL_ENRICHER_MODEL")
+    RAG_CHUNKER_MODEL = os.getenv("RAG_CHUNKER_MODEL")
+    RAG_CATEGORIZER_MODEL = os.getenv("RAG_CATEGORIZER_MODEL")
+    ## Configs
+    MAX_CHUNK_SIZE = os.getenv("MAX_CHUNK_SIZE")
+    EMBEDDING_DIMENSIONS = os.getenv("EMBEDDING_DIMENSIONS")
     
     @classmethod
     def validate(cls):

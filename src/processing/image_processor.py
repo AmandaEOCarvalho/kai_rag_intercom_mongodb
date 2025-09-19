@@ -86,7 +86,7 @@ class ImageProcessor:
 
             # Chamada à LLM (resposta curta e direta, sem desculpas)
             payload = {
-                "model": "gpt-4o",
+                "model": Config.RAG_IMAGE_PROCESSOR_MODEL,
                 "messages": [{
                     "role": "user",
                     "content": [

@@ -179,7 +179,7 @@ def generate_documents_from_json(json_file_path: str) -> List[Dict[str, Any]]:
                         "category": article.get("category", ""),
                         "language": article.get("language", "pt-BR"),
                         "meta_data": {
-                            "source_type": "json_article",
+                            "source_type": "json_articles",
                             "source_file": Path(json_file_path).name,
                             "article_index": i,
                             "is_chunked": True,

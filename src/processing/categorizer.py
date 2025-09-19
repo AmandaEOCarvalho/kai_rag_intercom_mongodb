@@ -12,7 +12,7 @@ class ArticleCategorizer:
             'how_to'
         ]
     
-    def categorize_article(self, full_text: str, title: str, model: str = "gpt-4o-mini") -> str:
+    def categorize_article(self, full_text: str, title: str) -> str:
         """Classifica um artigo em uma das categorias predefinidas"""
         prompt = f"""
         Você é um especialista em classificação de conteúdo para uma central de ajuda de software.
@@ -37,7 +37,7 @@ class ArticleCategorizer:
         print("  -> Categorizando artigo com LLM...")
         try:
             response = self.client.chat.completions.create(
-                model=model,
+                model=Config.RAG_CATEGORIZER_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0
             )

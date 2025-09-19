@@ -7,7 +7,7 @@ class LLMChunker:
         self.client = OpenAI(api_key=Config.OPENAI_API_KEY)
         self.max_chunk_size = Config.MAX_CHUNK_SIZE
     
-    def chunk_text(self, full_text: str, model: str = "gpt-4o-mini") -> list:
+    def chunk_text(self, full_text: str) -> list:
         """Implementa LLM Chunking semântico"""
         # Divisão preliminar
         # Divide o texto sempre que encontrar um cabeçalho de qualquer nível (#, ##, ###).
@@ -40,7 +40,7 @@ class LLMChunker:
         
         try:
             response = self.client.chat.completions.create(
-                model=model,
+                model=Config,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0
             )

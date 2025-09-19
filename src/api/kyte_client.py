@@ -100,8 +100,6 @@ def generate_pricing_documents_from_api() -> List[Dict[str, Any]]:
                 "title":title,
                 "content": content,
                 "category": "billing_plans_and_pricing",
-                "tags": [],
-                "platform": [],
                 "plans": plan_name.upper(),
                 "country": "INTERNATIONAL" if is_default_case else country_code.upper(),
                 "language": "pt-BR",

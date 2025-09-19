@@ -5,7 +5,7 @@ class ContextualEnricher:
     def __init__(self):
         self.client = OpenAI(api_key=Config.OPENAI_API_KEY)
     
-    def enrich_chunks(self, chunks: list, full_document_text: str, language: str, model: str = "gpt-4o-mini") -> list:
+    def enrich_chunks(self, chunks: list, full_document_text: str, language: str) -> list:
         """Adiciona contexto a cada chunk usando a metodologia "Contextual Retrieval" da Anthropic.
         O objetivo é tornar cada chunk mais autocontido para melhorar a busca (RAG).
         """
@@ -33,7 +33,7 @@ class ContextualEnricher:
             
             try:
                 response = self.client.chat.completions.create(
-                    model=model,
+                    model=Config.RAG_CONTEXTUAL_ENRICHER_MODEL,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.1,
                     max_tokens=80
