@@ -260,11 +260,12 @@ def main():
     print("📋 Pipeline: HTML → Markdown → Categorizar → Chunking → Enriquecimento → Limpeza → Embeddings")
     print("🌍 Estratégia de idiomas: PT-BR por padrão, múltiplos idiomas para artigos específicos")
 
-    # ✅ CONFIGURAÇÕES ATUALIZADAS
-    RAG_COLLECTION_ID = None  # ex.: "123456" para filtrar coleção específica
-    EXCLUDED_ARTICLE_IDS = ["7861154"]  # IDs a excluir
+    # ID da coleção RAG
+    RAG_COLLECTION_ID = "16070792"  # or None
+    # ID dos artigos que podem ser descartados (se houver)
+    EXCLUDED_ARTICLE_IDS = ["7861154"]  # or None
     
-    # ✅ NOVA CONFIGURAÇÃO: IDs que devem ter todos os idiomas (PT, EN, ES)
+    # IDs que devem ter todos os idiomas (PT, EN, ES)
     MULTILINGUAL_ARTICLE_IDS = [
         "7861149", "7915496", "8411647", "8887223", "7915619",
         "7861109", "10008263", "7885145", "7992438", "7914908"
